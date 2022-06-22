@@ -30,6 +30,11 @@ backwards_reachable_tube = lambda x: jnp.minimum(x, 0)
 # Value postprocessors.
 static_obstacle = lambda obstacle: (lambda t, v: jnp.maximum(v, obstacle))
 
+# Continue conditions
+target_time_reached = (
+    lambda init_time_values: lambda time_values: jnp.abs(init_time_values[0] - time_values[0]) > 0
+)
+
 
 @struct.dataclass
 class SolverSettings:
