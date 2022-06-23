@@ -30,6 +30,11 @@ backwards_reachable_tube = lambda x: jnp.minimum(x, 0)
 # Value postprocessors.
 static_obstacle = lambda obstacle: (lambda t, v: jnp.maximum(v, obstacle))
 
+# Continue conditions
+target_time_reached = (
+    lambda init_time_values: lambda time_values: jnp.abs(init_time_values[0] - time_values[0]) > 0
+)
+
 
 @struct.dataclass
 class SolverSettings:
@@ -54,6 +59,10 @@ class SolverSettings:
         pytree_node=False,
     )
     CFL_number: float = 0.75
+    continue_condition: Callable = struct.field(
+        default=target_time_reached,
+        pytree_node=False,
+    )
 
     @classmethod
     def with_accuracy(cls, accuracy: Text, **kwargs) -> "SolverSettings":
@@ -74,16 +83,17 @@ class SolverSettings:
 
 @functools.partial(jax.jit, static_argnames=("dynamics", "progress_bar"))
 def step(solver_settings, dynamics, grid, time, values, target_time, progress_bar=True):
+    continue_condition = solver_settings.continue_condition((target_time, values))
+    # time_values = (curr_time, curr_values, prev_time, prev_values)
     with (_try_get_progress_bar(time, target_time) if progress_bar is True else nullcontext(progress_bar)) as bar:
 
         def sub_step(time_values):
-            t, v = solver_settings.time_integrator(solver_settings, dynamics, grid, *time_values, target_time)
+            t, v = solver_settings.time_integrator(solver_settings, dynamics, grid, *time_values[:2], target_time)
             if bar is not False:
                 bar.update_to(jnp.abs(t - bar.reference_time))
-            return t, v
+            return t, v, *time_values[:2]
 
-        return jax.lax.while_loop(lambda time_values: jnp.abs(target_time - time_values[0]) > 0, sub_step,
-                                  (time, values))[1]
+        return jax.lax.while_loop(continue_condition, sub_step, (time, values, 0, jnp.zeros_like(values)))[1]
 
 
 @functools.partial(jax.jit, static_argnames=("dynamics", "progress_bar"))
