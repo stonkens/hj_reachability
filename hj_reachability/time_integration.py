@@ -6,6 +6,24 @@ import numpy as np
 
 from hj_reachability import utils
 
+num_samples = 0
+init_array = 0
+keys = 0
+curr_key = 0
+
+
+def setup_sampling(grid, nbr_samples):
+    global num_samples
+    global init_array
+    global keys
+    global curr_key
+    num_samples = nbr_samples
+    key = jax.random.PRNGKey(0)
+    keys = jax.random.split(key, 100000)
+    curr_key = 0
+    init_array = jnp.zeros(jnp.prod(jnp.array(grid.shape)))
+    init_array = init_array.at[:num_samples].set(1)
+
 
 def lax_friedrichs_numerical_hamiltonian(hamiltonian, state, time, value, left_grad_value, right_grad_value,
                                          dissipation_coefficients):
@@ -16,6 +34,9 @@ def lax_friedrichs_numerical_hamiltonian(hamiltonian, state, time, value, left_g
 
 @functools.partial(jax.jit, static_argnames="dynamics")
 def euler_step(solver_settings, dynamics, grid, time, values, time_step=None, max_time_step=None):
+    global init_array
+    global keys
+    global curr_key
     time_direction = jnp.sign(max_time_step) if time_step is None else jnp.sign(time_step)
     signed_hamiltonian = lambda *args, **kwargs: time_direction * dynamics.hamiltonian(*args, **kwargs)
     left_grad_values, right_grad_values = grid.upwind_grad_values(solver_settings.upwind_scheme, values)
@@ -31,7 +52,9 @@ def euler_step(solver_settings, dynamics, grid, time, values, time_step=None, ma
         time_step_bound = 1 / jnp.max(jnp.sum(dissipation_coefficients / jnp.array(grid.spacings), -1))
         time_step = time_direction * jnp.minimum(solver_settings.CFL_number * time_step_bound, jnp.abs(max_time_step))
     # TODO: Think carefully about whether `solver_settings.value_postprocessor` should be applied here instead.
-    return time + time_step, values + time_step * dvalues_dt
+    random_multiplier = jax.random.permutation(keys[curr_key], init_array, axis=0, independent=True).reshape(grid.shape)
+    curr_key += 1
+    return time + time_step, values + time_step * dvalues_dt * random_multiplier
 
 
 def first_order_total_variation_diminishing_runge_kutta(solver_settings, dynamics, grid, time, values, target_time):
