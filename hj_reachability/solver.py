@@ -93,7 +93,7 @@ def step(solver_settings, dynamics, grid, time, values, target_time, progress_ba
                 bar.update_to(jnp.abs(t - bar.reference_time))
             return t, v, *time_values[:2]
 
-        return jax.lax.while_loop(continue_condition, sub_step, (time, values, 0, jnp.zeros_like(values)))[1]
+        return jax.lax.while_loop(continue_condition, sub_step, (time, values, 0,  jnp.inf * jnp.ones_like(values)))[1]
 
 
 @functools.partial(jax.jit, static_argnames=("dynamics", "progress_bar"))
