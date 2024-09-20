@@ -63,12 +63,15 @@ class SolverSettings:
 
 
 @functools.partial(jax.jit, static_argnames=("dynamics", "progress_bar"))
-def step(solver_settings, dynamics, grid, time, values, target_time, progress_bar=True):
+def step(solver_settings, dynamics, grid, time, values, target_time, active_set=None, progress_bar=True):
+    if active_set is None:
+        active_set = jnp.ones_like(values, dtype=jnp.bool_)
     with (_try_get_progress_bar(time, target_time)
           if progress_bar is True else contextlib.nullcontext(progress_bar)) as bar:
 
         def sub_step(time_values):
-            t, v = solver_settings.time_integrator(solver_settings, dynamics, grid, *time_values, target_time)
+            t, v = solver_settings.time_integrator(solver_settings, dynamics, grid, *time_values, target_time, 
+                                                   active_set)
             if bar is not False:
                 bar.update_to(jnp.abs(t - bar.reference_time))
             return t, v
@@ -78,7 +81,9 @@ def step(solver_settings, dynamics, grid, time, values, target_time, progress_ba
 
 
 @functools.partial(jax.jit, static_argnames=("dynamics", "progress_bar"))
-def solve(solver_settings, dynamics, grid, times, initial_values, progress_bar=True):
+def solve(solver_settings, dynamics, grid, times, initial_values, active_set=None, progress_bar=True):
+    if active_set is None:
+        active_set = jnp.ones_like(initial_values, dtype=jnp.bool_)
     with (_try_get_progress_bar(times[0], times[-1])
           if progress_bar is True else contextlib.nullcontext(progress_bar)) as bar:
         make_carry_and_output_slice = lambda t, v: ((t, v), v)
@@ -86,7 +91,7 @@ def solve(solver_settings, dynamics, grid, times, initial_values, progress_bar=T
             initial_values[np.newaxis],
             jax.lax.scan(
                 lambda time_values, target_time: make_carry_and_output_slice(
-                    target_time, step(solver_settings, dynamics, grid, *time_values, target_time, bar)),
+                    target_time, step(solver_settings, dynamics, grid, *time_values, target_time, active_set, bar)),
                 (times[0], initial_values), times[1:])[1]
         ])
 
