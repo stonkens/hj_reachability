@@ -108,16 +108,16 @@ class TqdmWrapper:
 
     def __init__(self, tqdm, reference_time, total, *args, **kwargs):
         self.reference_time = reference_time
-        jax.experimental.host_callback.id_tap(lambda total, __: self._create_tqdm(tqdm, total, *args, **kwargs), total)
+        jax.experimental.io_callback(lambda total: self._create_tqdm(tqdm, total, *args, **kwargs), None, total)
 
     def _create_tqdm(self, tqdm, total, *args, **kwargs):
         self._tqdm = tqdm.tqdm(total=total, *args, **kwargs)
 
     def update_to(self, n):
-        return jax.experimental.host_callback.id_tap(lambda n, __: self._tqdm.update(n - self._tqdm.n), n)
+        jax.experimental.io_callback(lambda n: self._tqdm.update(n - self._tqdm.n), None, n)
 
     def close(self):
-        return jax.experimental.host_callback.id_tap(lambda _, __: self._tqdm.close(), None)
+        jax.experimental.io_callback(lambda _: self._tqdm.close(), None, None)
 
     def __enter__(self):
         return self
